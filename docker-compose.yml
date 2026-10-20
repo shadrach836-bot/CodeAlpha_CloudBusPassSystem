@@ -1,0 +1,33 @@
+# Run:            docker compose up --build -d
+# Scale servers:  docker compose up -d --scale web=5      (adds 5 app servers behind nginx, live)
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: bus
+      POSTGRES_PASSWORD: buspass
+      POSTGRES_DB: busdb
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bus -d busdb"]
+      interval: 3s
+      retries: 20
+
+  web:                                   # stateless app server - scale this to any number
+    build: .
+    environment:
+      DATABASE_URL: postgresql+psycopg2://bus:buspass@db:5432/busdb
+      SECRET_KEY: change-this-long-random-secret
+      STAFF_KEY: change-this-staff-key
+    depends_on:
+      db: { condition: service_healthy }
+    deploy: { replicas: 3 }
+
+  lb:
+    image: nginx:1.27-alpine
+    volumes: ["./nginx.conf:/etc/nginx/nginx.conf:ro"]
+    ports: ["80:80"]
+    depends_on: [web]
+
+volumes:
+  pgdata:
